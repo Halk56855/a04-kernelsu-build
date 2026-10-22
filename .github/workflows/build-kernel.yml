@@ -44,6 +44,7 @@ env:
   OUTPUT_DIR: ${{ github.workspace }}/output
   TOOLCHAIN_DIR: ${{ github.workspace }}/toolchains
   SUSFS_DIR: ${{ github.workspace }}/susfs
+  ANYKERNEL_DIR: ${{ github.workspace }}/anykernel3
   MIRROR_BASE: https://github.com/ravindu644/Android-Kernel-Tutorials/releases/download/toolchains
 
 jobs:
@@ -62,7 +63,7 @@ jobs:
             git make gcc flex bison bc cpio libssl-dev libncurses-dev \
             libelf-dev python3 python3-pip build-essential curl wget \
             xz-utils zstd g++ gawk liblz4-tool mkbootimg python-is-python3 \
-            android-sdk-libsparse-utils patch lld 2>/dev/null || true
+            android-sdk-libsparse-utils patch lld zip 2>/dev/null || true
           sudo apt-get clean
 
       - name: Download custom kernel source from your repo
@@ -268,31 +269,45 @@ jobs:
           make "${MAKE_OPTS[@]}" -j"$(nproc --all)" 2>&1 | tee "${{ env.OUTPUT_DIR }}/build.log" || \
           make "${MAKE_OPTS[@]}" -j"$(nproc --all)" LLVM_IAS=1 2>&1 | tee -a "${{ env.OUTPUT_DIR }}/build.log" || exit 1
 
-      - name: Package kernel
+      - name: Package Kernel with AnyKernel3 & Odin
         run: |
           mkdir -p "$OUTPUT_DIR"
-          cd "$KERNEL_DIR"
+          SRC_IMG="$KERNEL_DIR/out/arch/arm64/boot/Image"
 
-          SRC_IMG="out/arch/arm64/boot/Image"
           if [ ! -f "$SRC_IMG" ]; then
             echo "ERROR: No kernel Image found!"
             exit 1
           fi
 
+          # 1. نسخ النواة للـ Output
           cp "$SRC_IMG" "$OUTPUT_DIR/Image"
 
+          # 2. حزم AnyKernel3 (للتثبيت عن طريق TWRP / Recovery)
+          echo "=== Packaging AnyKernel3 ==="
+          git clone --depth=1 https://github.com/DaniTheSillyFem/AnyKernel3.git "$ANYKERNEL_DIR"
+          cp "$SRC_IMG" "$ANYKERNEL_DIR/Image"
+          cd "$ANYKERNEL_DIR"
+          rm -rf .git
+          zip -r9 "$OUTPUT_DIR/AnyKernel3-KernelSU-SUSFS-A045.zip" ./*
+
+          # 3. حزم Odin (للتفليش عن طريق Odin)
+          echo "=== Packaging Odin TAR ==="
           cd "$OUTPUT_DIR"
           tar -cvf "KernelSU_A045_boot.tar" "Image"
           md5sum "KernelSU_A045_boot.tar" | cut -d' ' -f1 | tr -d '\n' >> "KernelSU_A045_boot.tar"
           mv "KernelSU_A045_boot.tar" "KernelSU_A045_boot.tar.md5"
+
+          echo "=== Output directory content ==="
+          ls -lh "$OUTPUT_DIR"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: kernel-a045-kernelsu-susfs
           path: |
-            ${{ env.OUTPUT_DIR }}/Image
+            ${{ env.OUTPUT_DIR }}/AnyKernel3-KernelSU-SUSFS-A045.zip
             ${{ env.OUTPUT_DIR }}/KernelSU_A045_boot.tar.md5
+            ${{ env.OUTPUT_DIR }}/Image
             ${{ env.OUTPUT_DIR }}/build.log
           if-no-files-found: error
           retention-days: 30
