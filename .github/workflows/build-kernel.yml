@@ -163,6 +163,13 @@ jobs:
             chmod 644 "include/linux/susfs_def.h"
           fi
 
+          # إصلاح تعريف DEFAULT_KSU_MNT_ID إذا لم يكن موجوداً
+          if [ -f "include/linux/susfs_def.h" ]; then
+            if ! grep -q "DEFAULT_KSU_MNT_ID" "include/linux/susfs_def.h"; then
+              echo "#define DEFAULT_KSU_MNT_ID 10000" >> "include/linux/susfs_def.h"
+            fi
+          fi
+
           if ! grep -q "susfs.o" "fs/Makefile"; then
             sed -i '/^obj-y :=.*nsfs.o/a obj-$(CONFIG_KSU_SUSFS) += susfs.o' "fs/Makefile" || true
           fi
@@ -239,6 +246,7 @@ jobs:
 
       - name: Build kernel
         run: |
+          mkdir -p "${{ env.OUTPUT_DIR }}"
           cd "$KERNEL_DIR"
 
           export ARCH=arm64
