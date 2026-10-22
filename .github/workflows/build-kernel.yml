@@ -82,7 +82,7 @@ jobs:
             curl -L -o clang.tar.gz --connect-timeout 30 --retry 3 \
               "${MIRROR_BASE}/clang-r383902b.tar.gz" || {
               curl -L -o clang.tar.gz --connect-timeout 30 --retry 3 \
-                "${MIRROR_BASE}/clang-r383902.tar.gz" || exit 1
+                "${MIRROR_BASE}/clang-r383902b.tar.gz" || exit 1
             }
             tar -xzf clang.tar.gz -C "$TOOLCHAIN_DIR/clang-r383902"
             rm -f clang.tar.gz
@@ -247,6 +247,7 @@ jobs:
 
       - name: Build kernel
         run: |
+          set -o pipefail
           mkdir -p "${{ env.OUTPUT_DIR }}"
           cd "$KERNEL_DIR"
 
@@ -266,14 +267,14 @@ jobs:
             KSU_MANAGER_PACKAGE="${{ inputs.manager_package }}"
           )
 
-          make "${MAKE_OPTS[@]}" -j"$(nproc --all)" 2>&1 | tee "${{ env.OUTPUT_DIR }}/build.log" || \
-          make "${MAKE_OPTS[@]}" -j"$(nproc --all)" LLVM_IAS=1 2>&1 | tee -a "${{ env.OUTPUT_DIR }}/build.log" || exit 1
+          echo "Building kernel Image..."
+          make "${MAKE_OPTS[@]}" Image -j"$(nproc --all)" 2>&1 | tee "${{ env.OUTPUT_DIR }}/build.log" || \
+          make "${MAKE_OPTS[@]}" Image -j"$(nproc --all)" LLVM_IAS=1 2>&1 | tee -a "${{ env.OUTPUT_DIR }}/build.log" || exit 1
 
       - name: Package Kernel with AnyKernel3 & Odin
         run: |
           mkdir -p "$OUTPUT_DIR"
           
-          # البحث التلقائي عن ملف النواة Image في مجلد out لتجنب أي أخطاء في المسار
           SRC_IMG=$(find "$KERNEL_DIR/out" -name "Image" -type f | head -n 1)
 
           if [ -z "$SRC_IMG" ] || [ ! -f "$SRC_IMG" ]; then
@@ -288,7 +289,7 @@ jobs:
           # 1. حزم AnyKernel3 (للتثبيت عن طريق TWRP / OrangeFox)
           echo "=== Packaging AnyKernel3 ==="
           git clone --depth=1 https://github.com/DaniTheSillyFem/AnyKernel3.git "$ANYKERNEL_DIR"
-          cp "$SRC_IMG" "$ANYKERNEL_DIR/Image"
+          cp "$SRC_IMG" "$ANYKernel3_DIR/Image" 2>/dev/null || cp "$SRC_IMG" "$ANYKERNEL_DIR/Image"
           cd "$ANYKERNEL_DIR"
           rm -rf .git
           zip -r9 "$OUTPUT_DIR/AnyKernel3-KernelSU-SUSFS-A045.zip" ./*
