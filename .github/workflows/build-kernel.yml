@@ -164,7 +164,7 @@ jobs:
             chmod 644 "include/linux/susfs_def.h"
           fi
 
-          # إصلاح تعريف DEFAULT_KSU_MNT_ID إذا لم يكن موجوداً
+          # إصلاح تعريف DEFAULT_KSU_MNT_ID لتجنب أخطاء الترجمة
           if [ -f "include/linux/susfs_def.h" ]; then
             if ! grep -q "DEFAULT_KSU_MNT_ID" "include/linux/susfs_def.h"; then
               echo "#define DEFAULT_KSU_MNT_ID 10000" >> "include/linux/susfs_def.h"
@@ -272,17 +272,20 @@ jobs:
       - name: Package Kernel with AnyKernel3 & Odin
         run: |
           mkdir -p "$OUTPUT_DIR"
-          SRC_IMG="$KERNEL_DIR/out/arch/arm64/boot/Image"
+          
+          # البحث التلقائي عن ملف النواة Image في مجلد out لتجنب أي أخطاء في المسار
+          SRC_IMG=$(find "$KERNEL_DIR/out" -name "Image" -type f | head -n 1)
 
-          if [ ! -f "$SRC_IMG" ]; then
-            echo "ERROR: No kernel Image found!"
+          if [ -z "$SRC_IMG" ] || [ ! -f "$SRC_IMG" ]; then
+            echo "ERROR: No kernel Image found anywhere in out/ !"
+            find "$KERNEL_DIR/out" -type f 2>/dev/null || true
             exit 1
           fi
 
-          # 1. نسخ النواة للـ Output
+          echo "Found kernel image at: $SRC_IMG"
           cp "$SRC_IMG" "$OUTPUT_DIR/Image"
 
-          # 2. حزم AnyKernel3 (للتثبيت عن طريق TWRP / Recovery)
+          # 1. حزم AnyKernel3 (للتثبيت عن طريق TWRP / OrangeFox)
           echo "=== Packaging AnyKernel3 ==="
           git clone --depth=1 https://github.com/DaniTheSillyFem/AnyKernel3.git "$ANYKERNEL_DIR"
           cp "$SRC_IMG" "$ANYKERNEL_DIR/Image"
@@ -290,7 +293,7 @@ jobs:
           rm -rf .git
           zip -r9 "$OUTPUT_DIR/AnyKernel3-KernelSU-SUSFS-A045.zip" ./*
 
-          # 3. حزم Odin (للتفليش عن طريق Odin)
+          # 2. حزم Odin (للتفليش عن طريق Odin بصيغة tar.md5)
           echo "=== Packaging Odin TAR ==="
           cd "$OUTPUT_DIR"
           tar -cvf "KernelSU_A045_boot.tar" "Image"
